@@ -1,0 +1,108 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-items: center;
+    min-height: 100svh;
+    max-height: 100svh;
+    height: 100svh;
+    font-family: var(--font-noto-sans-kr);
+}
+
+@media (max-width: 600px) {
+    .page {
+        padding: 32px;
+        padding-bottom: 80px;
+    }
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    width: 100%;
+    max-height: 100%;
+    padding: 64px;
+
+    & > img {
+        position: absolute;
+        height: 100%;
+        width: 100%;
+        top: 50%;
+        z-index: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        object-fit: cover;
+        filter: brightness(0.6);
+    }
+}
+
+.content {
+    position: relative;
+    z-index: 1;
+    font-size: 48px;
+    font-weight: 700;
+    width: 100%;
+    height: 100%;
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: center;
+    overflow-x: hidden;
+    overflow-y: hidden;
+}
+
+.lottie {
+    width: 100px;
+    height: 100px;
+    position: relative;
+}
+
+.runLottie {
+    height: 100px;
+    position: absolute;
+    top: -5px;
+    left: -20px;
+    z-index: 1;
+}
+
+.scroll {
+    width: 100%;
+    min-height: 3000px;
+    background: linear-gradient(to bottom, #000000, #ffffff);
+}
+
+.snap {
+    // background: linear-gradient(to bottom, green, yellow);
+    border-bottom: 1px solid rgba(255, 255, 255);
+    width: 100%;
+    min-height: 798px;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.1);
+    width: 100%;
+    height: 300px;
+}
+
+.horizontalWrapper {
+    display: flex;
+    width: 500%;
+    // height: 100%;
+}
+
+.horizontalSection {
+    // height: 100%;
+    overflow: hidden;
+    position: relative;
+}
