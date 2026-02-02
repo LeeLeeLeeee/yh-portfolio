@@ -191,25 +191,54 @@ Web3 핵심 개발에 백엔드 리소스를 집중해야 하는 상황에서
 - 이벤트 트래픽을 **Functions 자동 확장 + 로그 기반 모니터링**으로 처리해 **비용 효율적 안정성 확보**
 
 
-### 2-3. AI 생성·Web3 보상 흐름의 불확실성을 견디는 실시간 UX 설계
+### 2-3. Multi-chain Bridge Architecture
 
 #### 🚧 문제
 
-AI 음악 생성과 플레이리스트 경험은
-지연·부분 응답·실패 같은 불확실성을 내재하고 있으며,
-Web3 보상 로직은 RPC 실패·서명 검증·트랜잭션 컨펌 지연 등
-외부 네트워크 요인의 영향을 크게 받는다.
+Web3 플랫폼에서 서로 다른 네트워크(Solana, BNB, 0G)와 상이한 지갑 SDK(Solana Wallet Adapter, Wagmi)를 통합해야 하는 과제에 직면했습니다.
+- 멀티홉(Multi-hop)의 불편함: SOLANA → 0G 전송 시 사용자가 직접 BSC를 거쳐 두 번의 트랜잭션을 수동 실행해야 함.
+- 코드 비대화: 체인별 에러 핸들링, 가스비 견적 로직이 파편화되어 중복 발생.
+- 확장성 한계: 신규 체인이나 프로토콜 추가 시 기존 비즈니스 로직 전체를 수정해야 하는 결합도 문제.
 
 #### 🧪 근거
 
-- AI 작업은 Job 기반 비동기 구조에서
-  상태 피드백이 없으면 이탈이 증가하는 일반적 패턴
-- Solana RPC는 네트워크 상황에 따라 실패/지연 변동 폭이 크며,
-  재시도 정책 부재 시 사용자 신뢰에 직접 영향
+- Wormhole, LayerZero 등 상이한 프로토콜을 통일된 인터페이스(IBridgeStrategy)로 추상화하여, 새로운 프로토콜 도입 시 기존 비즈니스 로직 수정 없이 '전략'만 추가하는 **OCP(Open-Closed Principle)** 를 준수하고자 했습니다.
+- 여러 브릿지 단계를 순차적으로 실행하는 중앙 제어 장치를 도입하여, 사용자는 출발/도착 체인만 선택하고 중간 경로는 시스템이 자동으로 계획·실행하는 사용자 경험 단순화를 목표로 했습니다.
+- 트랜잭션은 네트워크 환경에 따라 언제든 실패할 수 있습니다. 각 단계의 진행 상태와 Tx Hash를 실시간 기록함으로써, 장애 발생 시 **중단 지점부터 안전하게 재개(Retry)** 할 수 있는 회복력(Resilience)을 확보하고자 했습니다.
 
 #### ✅ 해결
 
-- **Prompt → Job → Stream** 형태의 생성 파이프라인을 정리하고
-  **SSE 기반 실시간 UI**로 생성 상태를 단계별로 가시화
-- Solana RPC/Signature 검증 로직에
-  **retry/backoff 전략**을 적용하여 실패 내성을 확보
+- **Strategy + Orchestrator 기반의 자동화 파이프라인** <br />
+프로토콜별 구현을 독립적인 전략으로 분리하고, Orchestrator가 최적의 경로를 생성하여 순차적으로 실행합니다.
+  - Wormhole/LayerZero를 독립적인 전략으로 구현, 새 프로토콜 추가 시 기존 코드 수정 불필요
+  - 출발/도착 지갑만으로 최적 경로 자동 생성 및 각 단계별 트랜잭션 순차 처리
+```typescript
+// Strategy: 프로토콜별 구현 분리
+interface IBridgeStrategy {
+  supports(src: NetworkType, dst: NetworkType): boolean;
+  quote(params): Promise<string>;
+  estimateGas(params): Promise<GasEstimationResult>;
+  execute(params, onConfirming): Promise<{ txHash, sendAmount }>;
+}
+// Orchestrator: 멀티홉 경로 자동 계획 및 실행
+class BridgeOrchestrator {
+  planRoute(srcWallet, dstWallet): BridgeRoute; // SOLANA → BSC → 0G 자동 계획
+  execute(route, amount, currentStep = 1): Promise<string[]>; // 순차 실행 + 재시도 지원
+}
+
+```
+- **사용자 경험 최적화**
+  - 실시간 진행률 표시: onProgress콜백으로 단계별 상태(pending → in_progress → confirmed) UI 노출
+  - 가스비 사전 체크: 전송 전 각 단계별 가스 충분 여부 검증 후 경고
+  - 디바운싱 견적 조회: amount 변경 시 500ms 디바운싱으로 불필요한 API 호출 방지
+  - 히스토리 조회: Firestore 기반 브릿지 히스토리 페이지로 과거 전송 추적 및 재시도
+
+#### 📈 결과
+- 확장성 확보<br />새로운 체인(예: Arbitrum) 추가 시 해당 전략만 구현하면 기존 로직 재사용
+→ 프로토콜 추가 개발 시간 60% 이상 단축 예상
+
+- 사용자 경험 단순화<br />SOLANA → 0G 같은 2홉 브릿지를 1번의 클릭으로 처리
+→ 이전에는 사용자가 BSC 중간 단계를 수동으로 처리해야 했던 것을 자동화
+
+- 안정성 강화<br /> 네트워크 오류 시 Firestore 히스토리 기반으로 중단 지점부터 재시도
+→ 사용자 자산 손실 리스크 최소화 및 실패 전송 복구 가능

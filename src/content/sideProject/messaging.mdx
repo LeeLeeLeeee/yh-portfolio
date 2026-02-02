@@ -6,15 +6,17 @@ import { FileTree } from 'nextra/components'
 
 # Sentinel-AI Messenger
 
-병원 내부적으로 사용하기 위한 메신저 Desktop 앱 개발
+본 프로젝트는 단일 병원을 대상으로 한 파일럿 단계로 시작되었으며,<br />
+초기 단계에서는 보안 규제 준수보다 '메시지 전달의 신뢰성'과 '공유 PC 환경에서의 식별 시스템 최적화'를<br />
+최우선 목표로 설정하여 개발되었습니다.
 
 ## 1. 업무 개요
 
 - 역할: 풀스택 개발
 - 기술 스택: React, Fastify, BullMQ, Redis, Electron, PostgreSQL, AWS
 - 업무 목표:
-  - 병원에서 사용 가능한 메신저 앱 개발
-  - 유저 베이스가 아닌 PC 베이스의 메신저 구조 구축
+  - "PC-Centric" 식별 체계 확립 (사용자 기반이 아닌 환경)
+  - 확장성을 고려한 "플러그형" 아키텍처
   - 실시간 대화 가능한 프로세스 구조 구축
 
 ## 2. 폴더 구조
@@ -25,6 +27,7 @@ import { FileTree } from 'nextra/components'
 │   ├── desktop/        # Electron
 │   ├── be/             # Backend API Server
 │   └── ws/             # WebSocket Server
+├── infra/              # Deployment
 └── packages/
     ├── application/     # Use Cases (Business Logic)
     ├── domain/          # Domain Models & Entities
@@ -42,100 +45,22 @@ import { FileTree } from 'nextra/components'
 
 ### 3-1. Frontend
 
-프론트엔드 아키텍처에서는 **성능 최적화**, **크로스 플랫폼 코드 공유**, **효율적인 상태 관리**를 핵심 목표로 설정했습니다. 특히 Desktop과 Web 환경을 단일 코드베이스로 관리하면서도 각 플랫폼의 강점을 최대한 활용하는 데 중점을 두었습니다.
+프론트엔드 설계의 핵심 목표는 **"저사양 PC 환경에서도 점유율을 최소화하며 실시간 메신저의 반응성을 극대화하는 것"** 이었습니다.
 
-#### Zero-Runtime CSS-in-JS: Vanilla Extract
-
-기존 CSS-in-JS 라이브러리(styled-components, emotion 등)는 런타임에 스타일을 생성하여 초기 로딩 성능에 부정적인 영향을 미칩니다. 이를 해결하기 위해 **Vanilla Extract**를 도입하여 빌드 타임에 정적 CSS를 생성하는 전략을 선택했습니다.
-
-```typescript
-// src/styles/token.css.ts - 디자인 토큰 정의
-export const colors = {
-  primary: '#4F46E5',
-  secondary: '#10B981',
-  background: '#FFFFFF',
-  // ...
-};
-
-export const spacing = {
-  xs: '4px',
-  sm: '8px',
-  md: '16px',
-  // ...
-};
-
-// src/components/atom/button/button.css.ts - 타입 세이프한 스타일
-import { style } from '@vanilla-extract/css';
-import { colors, spacing } from '../../../styles/token.css';
-
-export const button = style({
-  backgroundColor: colors.primary,
-  padding: `${spacing.sm} ${spacing.md}`,
-  borderRadius: '8px',
-  ':hover': {
-    opacity: 0.9,
-  },
-});
-```
-
-**성능 개선 효과**:
-- **Zero Runtime Overhead**: 런타임에 스타일 계산 없음 → 초기 렌더링 속도 향상
-- **Type-Safe Styling**: TypeScript로 스타일 작성 → 컴파일 타임 오류 검출
-- **Automatic Tree Shaking**: 사용하지 않는 스타일 자동 제거 → 번들 크기 최소화
-- **Critical CSS Extraction**: Vite가 필요한 CSS만 자동 번들링 → 초기 로딩 최적화
-
-```typescript
-// vite.config.ts
-import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
-
-export default defineConfig({
-  plugins: [
-    react(),
-    vanillaExtractPlugin(), // 빌드 타임에 CSS 생성
-  ],
-});
-```
-
-#### Electron + Web 하이브리드 아키텍처
-
-Desktop(Electron)과 Web 환경에서 **90% 이상의 코드를 공유**하면서도 플랫폼별 기능을 조건부로 활성화하는 아키텍처를 설계했습니다.
-
-```mermaid
-graph TB
-    subgraph "Shared Codebase"
-        A[apps/fe/src/main.tsx<br/>공통 React 앱]
-        B[React Components]
-        C[Business Logic]
-        D[Hooks & State]
-    end
-    
-    subgraph "Web Environment"
-        E[Browser]
-    end
-    
-    subgraph "Electron Environment"
-        F[Electron Renderer]
-        G[IPC Bridge<br/>window.ipc]
-        H[Electron Main Process]
-        I[Node.js APIs<br/>파일시스템, 윈도우 관리]
-    end
-    
-    A --> B
-    A --> C
-    A --> D
-    
-    A -->|Web Build| E
-    A -->|Electron Build| F
-    F --> G
-    G <-->|IPC Communication| H
-    H --> I
-    
-    style A fill:#4F46E5,color:#fff
-    style G fill:#10B981,color:#fff
-    style H fill:#F59E0B,color:#fff
-```
-
-
+#### High-Performance UX Engineering
+- **Zero-Runtime CSS-in-JS (Vanilla Extract)** <br />메신저 특성상 수많은 메시지 버블이 실시간으로 생성되고 스크롤됩니다. 런타임에 스타일을 계산하는 기존 라이브러리는 대규모 리스트 렌더링 시 CPU 부하를 유발할 수 있어 이를 배제했습니다.
+  - Runtime Overhead 제거: 빌드 타임에 모든 스타일을 정적 CSS로 추출하여, 브라우저가 스타일을 계산하는 Scripting Time을 0에 가깝게 단축했습니다.
+  - 성능적 이점: 빈번한 UI 업데이트 상황에서도 Frame Drop을 방지하여 매끄러운 스크롤 경험을 제공합니다.
+  - Type-Safe Styling: TypeScript 기반 스타일 정의를 통해 런타임 에러를 방지하고 개발 생산성을 높였습니다.
+- **데이터 오케스트레이션 및 체감 속도 최적화** <br />네트워크 지연을 기술적으로 극복하여 사용자가 '기다림'을 느끼지 않게 하는 전략을 도입했습니다.
+  - Optimistic Updates (낙관적 업데이트): 메시지 전송 시 서버 응답을 기다리지 않고 UI를 즉시 반영하여 네트워크 지연을 0으로 체감하게 설계했습니다.
+  - Windowing 기법: 수천 개의 메시지 중 현재 보이는 영역만 렌더링하도록 처리하여 브라우저 메모리 점유율을 일정하게 유지했습니다.
+- **리소스 점유 최적화: 저사양 및 상주형 환경 대응** <br />병원 PC 특성상 제한된 자원 내에서 안정적으로 앱이 돌아갈 수 있게 Electron의 구조를 설계 했습니다.
+  - Single-Socket Architecture (Main Process 관리): 멀티 윈도우 환경에서 각 렌더러(채팅창, 설정창 등)에 각각 소켓을 연결할 경우 불필요한 PC 자원 낭비를 초래할 수 있습니다.
+  이를 방지하기 위해 연결 주체를 렌더러가 아닌 Main Process로 단일화 하고, 로직을 단순화하여 복구 로직 및 주요 소켓 로직을 일원화 할 수 있었습니다.
+  - IPC 지연 해소 및 직렬화 비용 최적화: IPC 페이로드를 최소화 하기 위해 **ID 기반 참조 전략**을 사용하였습니다. 메인 프로세스는 ID, Type만 전달하고 렌더러는 필요한 경우에 데이터를 요청하거나
+  캐싱된 데이터를 받아 사용할 수 있게 설계하였습니다.
+  
 
 #### React Query 기반 데이터 캐싱 전략
 
@@ -143,23 +68,28 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant UI as React UI
-    participant RQ as React Query
-    participant Cache as Cache Layer
-    participant API as Backend
+    autonumber
+    participant MyUI as My PC (UI)
+    participant MyRQ as My PC (Cache)
+    participant BE as Backend (API/WS)
+    participant OtherRQ as Other PC (Cache)
+    participant OtherUI as Other PC (UI)
 
-    Note over UI,API: 메시지 전송
-    UI->>RQ: 메시지 전송 요청
-    RQ->>Cache: Optimistic Update (즉시 반영)
-    Cache-->>UI: UI 즉시 업데이트
-    RQ->>API: 서버 전송
-    API-->>RQ: 응답
-    RQ->>Cache: 실제 데이터로 교체
+    Note over MyUI, MyRQ: [송신 측] 낙관적 업데이트
+    MyUI->>MyRQ: 메시지 전송 요청
+    MyRQ->>MyRQ: Optimistic Update (UI 즉시 반영)
+    MyRQ-->>MyUI: 전송 중 상태 표시
 
-    Note over UI,API: 메시지 수신
-    API->>RQ: 새 메시지 이벤트
-    RQ->>Cache: 캐시 자동 갱신
-    Cache-->>UI: UI 반영
+    Note over MyRQ, BE: [서버] 데이터 영속화
+    MyRQ->>BE: API 전송 (HTTP POST)
+    BE->>BE: DB 저장 및 Sequence 번호 할당
+    BE-->>MyRQ: 응답 (서버 확정 데이터)
+    MyRQ->>MyRQ: 캐시 데이터 확정 (Rollback/Update)
+
+    Note over BE, OtherUI: [수신 측] 실시간 동기화
+    BE->>OtherRQ: WebSocket 이벤트 발송 (New Message)
+    OtherRQ->>OtherRQ: setQueryData (캐시 즉시 갱신)
+    OtherRQ-->>OtherUI: 새 메시지 렌더링
 ```
 
 
@@ -283,6 +213,36 @@ function createAppContainer(): AppContainer {
 - **싱글톤 관리**: 컨테이너가 서비스 인스턴스 생명주기 자동 관리
 - **환경별 구성**: 개발/프로덕션 환경별 서비스 구현 교체 가능
 
+```typescript
+// 유닛 테스트 단순화
+
+// 실 구현부
+@injectable()
+export class SendMessageUseCase {
+  constructor(
+    @inject(TYPES.MessageRepo) private messageRepo: IMessageRepo // 인터페이스에 의존
+  ) {}
+
+  async execute(content: string) {
+    if (!content) throw new Error("내용 비어있음");
+    return await this.messageRepo.save(content);
+  }
+}
+
+// 테스트 케이스
+it("DB 없이도 비즈니스 로직 테스트 가능", async () => {
+  const container = new Container();
+  const mockRepo = { save: jest.fn().mockResolvedValue(true) };
+
+  // 실제 DB 대신 Mock 바인딩
+  container.bind<IMessageRepo>(TYPES.MessageRepo).toConstantValue(mockRepo);
+  const useCase = container.resolve(SendMessageUseCase);
+
+  const result = await useCase.execute("Hello");
+  expect(result).toBe(true);
+});
+```
+
 #### 실시간 메시지 처리 아키텍처
 
 **Fastify → BullMQ → Redis Pub/Sub → WebSocket**으로 이어지는 비동기 파이프라인을 구축했습니다.
@@ -369,6 +329,14 @@ sequenceDiagram
 **전략 효과**:
 - **실시간 성능**: 읽음 상태는 Redis에서 즉시 읽기 (< 1ms)
 - **DB 부하 감소**: 60초 배치 동기화로 쓰기 작업 90% 이상 감소
+
+**🔍 한계점 및 개선 방안: Reliability vs Performance** <br />
+현재의 Write-Behind 전략은 극적인 성능 향상을 가져왔으나, 시스템 장애 시 최대 60초 분량의 읽음 데이터 유실 가능성이 존재합니다.
+
+* **Trade-off 결정 근거**: 메신저 서비스에서 '읽음 상태'는 메시지 본문보다 상대적으로 데이터 중요도가 낮다고 판단, 시스템 가용성과 성능을 위해 Eventual Consistency 모델을 선택했습니다.
+* **차기 개선안**: 
+    1. **Redis Streams 도입**: Dirty Flag 방식의 레이스 컨디션을 해결하고 이벤트 기반의 안정적인 동기화 파이프라인 구축.
+    2. **Check-and-Set 전략**: DB 업데이트 시 시퀀스 번호 비교 로직을 추가하여 데이터 역전 현상 방지.
 
 #### Prisma + Zod: 컴파일타임 & 런타임 타입 안전성
 
